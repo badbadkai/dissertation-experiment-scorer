@@ -239,6 +239,17 @@ def calculate_stats(output_path: str) -> dict:
                 g_str = str(g).strip()
                 gender_breakdown[g_str] = gender_breakdown.get(g_str, 0) + 1
         
+        # Age range
+        ages = []
+        for a in get_column_values('Age'):
+            if a:
+                try:
+                    age_val = int(a)
+                    if 10 < age_val < 120:  # Sanity check
+                        ages.append(age_val)
+                except (ValueError, TypeError):
+                    pass
+        
         return {
             "total_responses": total,
             "complete": complete,
@@ -250,7 +261,11 @@ def calculate_stats(output_path: str) -> dict:
                 "min": min(recall_scores) if recall_scores else 0,
                 "max": max(recall_scores) if recall_scores else 0
             },
-            "gender_breakdown": gender_breakdown
+            "gender_breakdown": gender_breakdown,
+            "age_range": {
+                "min": min(ages) if ages else 0,
+                "max": max(ages) if ages else 0
+            }
         }
     except Exception as e:
         return {"error": str(e)}

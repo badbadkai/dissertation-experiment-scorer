@@ -22,6 +22,7 @@ interface ProcessingStats {
   mean_recall_score: number;
   recall_score_range: { min: number; max: number };
   gender_breakdown: Record<string, number>;
+  age_range: { min: number; max: number };
 }
 
 export default function Chat({ token, userName, onLogout }: ChatProps) {
@@ -236,10 +237,6 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
                   <h3 className="text-lg font-medium text-white mb-4">Summary</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                     <div>
-                      <p className="text-[var(--muted)]">Total Responses</p>
-                      <p className="text-white text-xl font-medium">{stats.total_responses}</p>
-                    </div>
-                    <div>
                       <p className="text-[var(--muted)]">Complete</p>
                       <p className="text-green-400 text-xl font-medium">{stats.complete}</p>
                     </div>
@@ -248,16 +245,12 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
                       <p className="text-yellow-400 text-xl font-medium">{stats.incomplete}</p>
                     </div>
                     <div>
-                      <p className="text-[var(--muted)]">Completion Rate</p>
-                      <p className="text-white text-xl font-medium">{stats.completion_rate}%</p>
-                    </div>
-                    <div>
-                      <p className="text-[var(--muted)]">Mean Recall Score</p>
+                      <p className="text-[var(--muted)]">Mean Recall</p>
                       <p className="text-white text-xl font-medium">{stats.mean_recall_score}</p>
                     </div>
                     <div>
-                      <p className="text-[var(--muted)]">Score Range</p>
-                      <p className="text-white text-xl font-medium">{stats.recall_score_range.min} - {stats.recall_score_range.max}</p>
+                      <p className="text-[var(--muted)]">Age Range</p>
+                      <p className="text-white text-xl font-medium">{stats.age_range?.min ?? '–'} - {stats.age_range?.max ?? '–'}</p>
                     </div>
                   </div>
                   
@@ -270,6 +263,21 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
                           <div key={condition} className="flex items-center gap-2">
                             <span className="text-white capitalize">{condition}:</span>
                             <span className="text-blue-400 font-medium">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Gender Split */}
+                  {Object.keys(stats.gender_breakdown).length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                      <p className="text-[var(--muted)] mb-2">Gender</p>
+                      <div className="flex gap-4 flex-wrap">
+                        {Object.entries(stats.gender_breakdown).map(([gender, count]) => (
+                          <div key={gender} className="flex items-center gap-2">
+                            <span className="text-white">{gender}:</span>
+                            <span className="text-purple-400 font-medium">{count}</span>
                           </div>
                         ))}
                       </div>
