@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, HelpCircle, LogOut, Download, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
@@ -25,13 +25,39 @@ interface ProcessingStats {
   age_range: { min: number; max: number };
 }
 
+interface UploadLogEntry {
+  name: string;
+  timestamp: string;
+  responses: number;
+  complete: number;
+}
+
 export default function Chat({ token, userName, onLogout }: ChatProps) {
   const [viewState, setViewState] = useState<ViewState>('home');
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [stats, setStats] = useState<ProcessingStats | null>(null);
+  const [uploadHistory, setUploadHistory] = useState<UploadLogEntry[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch upload history on mount
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch(`${API_URL}/uploads/history`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUploadHistory(data.reverse()); // Most recent first
+      }
+    } catch {
+      console.error('Failed to fetch upload history');
+    }
+  };
+
+  // Fetch history on mount
+  useEffect(() => { fetchHistory(); }, []);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -86,6 +112,9 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       setViewState('success');
+      
+      // Refresh upload history
+      fetchHistory();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'An error occurred');
       setViewState('error');
@@ -144,7 +173,7 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
                 What can I help you with today?
               </p>
 
-              <div className="grid sm:grid-cols-2 gap-4 max-w-lg mx-auto">
+              <div className="grid sm:grid-cols-2 gap-4 max-w-lg mx-auto mb-8">
                 <button
                   onClick={() => setViewState('help')}
                   className="flex items-center justify-center gap-3 bg-[var(--card)] hover:bg-[var(--card-hover)] border border-[var(--border)] rounded-xl p-5 text-left transition-all hover:scale-[1.02] group"
@@ -161,6 +190,36 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
                   <span className="text-white">Upload CSV for scoring</span>
                 </button>
               </div>
+
+              {/* Upload History */}
+              {uploadHistory.length > 0 && (
+                <div className="max-w-lg mx-auto">
+                  <h3 className="text-sm text-[var(--muted)] mb-3">Recent Uploads</h3>
+                  <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
+                    {uploadHistory.slice(0, 5).map((entry, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`flex items-center justify-between px-4 py-3 text-sm ${idx > 0 ? 'border-t border-[var(--border)]' : ''}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-white font-medium">{entry.name}</span>
+                          <span className="text-[var(--muted)]">
+                            {entry.complete}/{entry.responses} complete
+                          </span>
+                        </div>
+                        <span className="text-[var(--muted)] text-xs">
+                          {new Date(entry.timestamp).toLocaleString('en-GB', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 

@@ -5,8 +5,9 @@ import os
 import sys
 import tempfile
 import shutil
+import json
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, status
@@ -28,6 +29,9 @@ from qualtrics_cleanup import process_csv
 SECRET_KEY = os.environ.get("JWT_SECRET", "dissertation-scorer-secret-change-in-prod")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+# Upload history file
+UPLOAD_HISTORY_FILE = Path(__file__).parent / "upload_history.json"
 
 # Approved users (email -> hashed password)
 # Password: admin
@@ -126,6 +130,11 @@ async def login(request: LoginRequest):
 async def get_me(user: UserInfo = Depends(get_current_user)):
     return user
 
+@app.get("/uploads/history")
+async def get_upload_history(user: UserInfo = Depends(get_current_user)):
+    """Get upload history."""
+    return load_upload_history()
+
 class ProcessingStats(BaseModel):
     total_responses: int
     complete: int
@@ -135,6 +144,34 @@ class ProcessingStats(BaseModel):
     mean_recall_score: float
     recall_score_range: dict
     gender_breakdown: dict
+
+class UploadLogEntry(BaseModel):
+    name: str
+    timestamp: str
+    responses: int
+    complete: int
+
+def load_upload_history() -> List[dict]:
+    """Load upload history from file."""
+    if UPLOAD_HISTORY_FILE.exists():
+        try:
+            return json.loads(UPLOAD_HISTORY_FILE.read_text())
+        except:
+            return []
+    return []
+
+def save_upload_log(name: str, responses: int, complete: int):
+    """Save an upload log entry."""
+    history = load_upload_history()
+    history.append({
+        "name": name,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "responses": responses,
+        "complete": complete
+    })
+    # Keep only last 50 entries
+    history = history[-50:]
+    UPLOAD_HISTORY_FILE.write_text(json.dumps(history, indent=2))
 
 @app.post("/process/csv")
 async def process_csv_file(
@@ -169,6 +206,13 @@ async def process_csv_file(
         
         # Calculate stats from output file
         stats = calculate_stats(str(output_path))
+        
+        # Log the upload
+        save_upload_log(
+            name=user.name,
+            responses=stats.get("total_responses", 0),
+            complete=stats.get("complete", 0)
+        )
         
         # Read output file and return
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if output_ext == "xlsx" else "text/csv"
