@@ -13,11 +13,23 @@ interface ChatProps {
 
 type ViewState = 'home' | 'help' | 'uploading' | 'success' | 'error';
 
+interface ProcessingStats {
+  total_responses: number;
+  complete: number;
+  incomplete: number;
+  completion_rate: number;
+  conditions: Record<string, number>;
+  mean_recall_score: number;
+  recall_score_range: { min: number; max: number };
+  gender_breakdown: Record<string, number>;
+}
+
 export default function Chat({ token, userName, onLogout }: ChatProps) {
   const [viewState, setViewState] = useState<ViewState>('home');
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [stats, setStats] = useState<ProcessingStats | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUploadClick = () => {
@@ -58,6 +70,17 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
         throw new Error(data.detail || 'Processing failed');
       }
 
+      // Extract stats from response header
+      const statsHeader = res.headers.get('X-Processing-Stats');
+      if (statsHeader) {
+        try {
+          const parsedStats = JSON.parse(statsHeader);
+          setStats(parsedStats);
+        } catch {
+          console.error('Failed to parse stats header');
+        }
+      }
+      
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
@@ -90,6 +113,7 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
     setViewState('home');
     setErrorMessage('');
     setDownloadUrl(null);
+    setStats(null);
   };
 
   return (
@@ -202,9 +226,58 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
             <>
               <CheckCircle className="w-12 h-12 text-[var(--success)] mx-auto mb-6" />
               <h2 className="text-2xl font-light text-white mb-2">Processing complete!</h2>
-              <p className="text-[var(--muted)] mb-8">
-                Your file has been cleaned and scored. The recall responses have been analyzed.
+              <p className="text-[var(--muted)] mb-6">
+                Your file has been cleaned and scored.
               </p>
+              
+              {/* Stats Summary */}
+              {stats && (
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 mb-8 text-left">
+                  <h3 className="text-lg font-medium text-white mb-4">Summary</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-[var(--muted)]">Total Responses</p>
+                      <p className="text-white text-xl font-medium">{stats.total_responses}</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">Complete</p>
+                      <p className="text-green-400 text-xl font-medium">{stats.complete}</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">Incomplete</p>
+                      <p className="text-yellow-400 text-xl font-medium">{stats.incomplete}</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">Completion Rate</p>
+                      <p className="text-white text-xl font-medium">{stats.completion_rate}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">Mean Recall Score</p>
+                      <p className="text-white text-xl font-medium">{stats.mean_recall_score}</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">Score Range</p>
+                      <p className="text-white text-xl font-medium">{stats.recall_score_range.min} - {stats.recall_score_range.max}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Condition Distribution */}
+                  {Object.keys(stats.conditions).length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                      <p className="text-[var(--muted)] mb-2">Conditions</p>
+                      <div className="flex gap-4">
+                        {Object.entries(stats.conditions).map(([condition, count]) => (
+                          <div key={condition} className="flex items-center gap-2">
+                            <span className="text-white capitalize">{condition}:</span>
+                            <span className="text-blue-400 font-medium">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button
                   onClick={handleDownload}

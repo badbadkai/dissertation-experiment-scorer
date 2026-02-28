@@ -125,13 +125,23 @@ async def login(request: LoginRequest):
 async def get_me(user: UserInfo = Depends(get_current_user)):
     return user
 
+class ProcessingStats(BaseModel):
+    total_responses: int
+    complete: int
+    incomplete: int
+    completion_rate: float
+    conditions: dict
+    mean_recall_score: float
+    recall_score_range: dict
+    gender_breakdown: dict
+
 @app.post("/process/csv")
 async def process_csv_file(
     file: UploadFile = File(...),
     output_format: str = "xlsx",
     user: UserInfo = Depends(get_current_user)
 ):
-    """Process uploaded CSV file and return cleaned/scored output."""
+    """Process uploaded CSV file and return cleaned/scored output with stats."""
     
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Please upload a CSV file")
@@ -156,6 +166,9 @@ async def process_csv_file(
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Processing failed - no output generated")
         
+        # Calculate stats from output file
+        stats = calculate_stats(str(output_path))
+        
         # Read output file and return
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if output_ext == "xlsx" else "text/csv"
         
@@ -163,11 +176,84 @@ async def process_csv_file(
         final_output = tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_ext}")
         shutil.copy(output_path, final_output.name)
         
-        return FileResponse(
+        # Return stats in headers and file as response
+        response = FileResponse(
             final_output.name,
             media_type=media_type,
             filename=f"scored_results.{output_ext}"
         )
+        # Add stats as custom header (JSON encoded)
+        import json
+        response.headers["X-Processing-Stats"] = json.dumps(stats)
+        return response
+
+
+def calculate_stats(output_path: str) -> dict:
+    """Calculate summary statistics from processed output file."""
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(output_path)
+        ws = wb.active
+        
+        # Get headers
+        headers = [cell.value for cell in ws[1]]
+        
+        # Helper to get column values
+        def get_column_values(col_name):
+            if col_name not in headers:
+                return []
+            idx = headers.index(col_name)
+            return [row[idx].value for row in ws.iter_rows(min_row=2, max_row=ws.max_row)]
+        
+        # Basic counts
+        completion_status = get_column_values('CompletionStatus')
+        total = len(completion_status)
+        complete = sum(1 for s in completion_status if s == 'COMPLETE')
+        incomplete = total - complete
+        
+        # Condition distribution
+        conditions = {}
+        for c in get_column_values('Condition'):
+            if c:
+                c_lower = str(c).lower().strip()
+                conditions[c_lower] = conditions.get(c_lower, 0) + 1
+        
+        # Recall scores (only for complete entries)
+        recall_scores = []
+        recall_total_idx = headers.index('Recall_Total') if 'Recall_Total' in headers else None
+        comp_idx = headers.index('CompletionStatus') if 'CompletionStatus' in headers else None
+        
+        if recall_total_idx is not None and comp_idx is not None:
+            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                if row[comp_idx].value == 'COMPLETE':
+                    score = row[recall_total_idx].value
+                    if isinstance(score, (int, float)):
+                        recall_scores.append(score)
+        
+        mean_recall = sum(recall_scores) / len(recall_scores) if recall_scores else 0
+        
+        # Gender breakdown
+        gender_breakdown = {}
+        for g in get_column_values('Gender'):
+            if g:
+                g_str = str(g).strip()
+                gender_breakdown[g_str] = gender_breakdown.get(g_str, 0) + 1
+        
+        return {
+            "total_responses": total,
+            "complete": complete,
+            "incomplete": incomplete,
+            "completion_rate": round(complete / total * 100, 1) if total > 0 else 0,
+            "conditions": conditions,
+            "mean_recall_score": round(mean_recall, 2),
+            "recall_score_range": {
+                "min": min(recall_scores) if recall_scores else 0,
+                "max": max(recall_scores) if recall_scores else 0
+            },
+            "gender_breakdown": gender_breakdown
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/help/export")
 async def help_export(user: UserInfo = Depends(get_current_user)):
