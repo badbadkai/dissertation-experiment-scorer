@@ -35,6 +35,10 @@ USERS = {
     "projectskyfall24@gmail.com": {
         "name": "Kai",
         "password_hash": bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode()
+    },
+    "rafiamejri17@gmail.com": {
+        "name": "Rafia",
+        "password_hash": bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode()
     }
 }
 

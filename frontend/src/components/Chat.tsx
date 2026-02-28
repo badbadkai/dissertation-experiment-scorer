@@ -50,6 +50,11 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
 
       if (!res.ok) {
         const data = await res.json();
+        // Auto-logout on token expiry
+        if (res.status === 401 || data.detail === 'Invalid token') {
+          onLogout();
+          return;
+        }
         throw new Error(data.detail || 'Processing failed');
       }
 
@@ -108,10 +113,10 @@ export default function Chat({ token, userName, onLogout }: ChatProps) {
           {viewState === 'home' && (
             <>
               <h1 className="text-4xl font-light text-white mb-4">
-                Hello {userName}, I'm Silver.
+                Hello {userName}.
               </h1>
               <p className="text-xl text-[var(--muted)] mb-12">
-                Kai's personal AI assistant. What can I help you with today?
+                What can I help you with today?
               </p>
 
               <div className="grid sm:grid-cols-2 gap-4 max-w-lg mx-auto">

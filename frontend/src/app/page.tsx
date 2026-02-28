@@ -4,20 +4,44 @@ import { useState, useEffect } from 'react';
 import Login from '@/components/Login';
 import Chat from '@/components/Chat';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token
-    const savedToken = localStorage.getItem('scorer_token');
-    const savedName = localStorage.getItem('scorer_name');
-    if (savedToken && savedName) {
-      setToken(savedToken);
-      setUserName(savedName);
-    }
-    setIsLoading(false);
+    // Check for existing token and validate it
+    const validateToken = async () => {
+      const savedToken = localStorage.getItem('scorer_token');
+      const savedName = localStorage.getItem('scorer_name');
+      
+      if (savedToken && savedName) {
+        try {
+          // Verify token is still valid
+          const res = await fetch(`${API_URL}/auth/me`, {
+            headers: { Authorization: `Bearer ${savedToken}` },
+          });
+          
+          if (res.ok) {
+            setToken(savedToken);
+            setUserName(savedName);
+          } else {
+            // Token expired or invalid - clear it
+            localStorage.removeItem('scorer_token');
+            localStorage.removeItem('scorer_name');
+          }
+        } catch {
+          // API unreachable - keep token for now
+          setToken(savedToken);
+          setUserName(savedName);
+        }
+      }
+      setIsLoading(false);
+    };
+    
+    validateToken();
   }, []);
 
   const handleLogin = (newToken: string, name: string) => {
