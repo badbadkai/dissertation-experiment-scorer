@@ -218,12 +218,14 @@ async def process_csv_file(
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if output_ext == "xlsx" else "text/csv"
         
         # Copy to a persistent temp location for download
-        final_output = tempfile.NamedTemporaryFile(delete=False, suffix=f".{output_ext}")
-        shutil.copy(output_path, final_output.name)
+        # Use mkstemp to avoid file handle conflicts
+        fd, final_output_path = tempfile.mkstemp(suffix=f".{output_ext}", prefix="scorer_")
+        os.close(fd)  # Close the file descriptor immediately
+        shutil.copy(output_path, final_output_path)
         
         # Return stats in headers and file as response
         response = FileResponse(
-            final_output.name,
+            final_output_path,
             media_type=media_type,
             filename=f"scored_results.{output_ext}"
         )
